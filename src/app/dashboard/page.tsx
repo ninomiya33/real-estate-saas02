@@ -9,16 +9,10 @@ import { Lead } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CardCustom } from "@/components/ui/card-custom";
-import {
-  AlertDialog, AlertDialogTrigger, AlertDialogContent,
-  AlertDialogHeader, AlertDialogTitle, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
-} from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Search, Trash2, FileEdit, Users, LineChart, Home } from "lucide-react";
 
@@ -26,6 +20,7 @@ export default function DashboardPage() {
   const { t } = useLanguage();
   const { user } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [publicList, setPublicList] = useState<Lead[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<'all' | 'new' | 'inProgress' | 'completed'>('all');
 
@@ -33,16 +28,17 @@ export default function DashboardPage() {
     const fetchLeads = async () => {
       if (!user?.id) return;
 
-      const { data, error } = await supabase
+      // customers テーブル
+      const { data: customers, error: error1 } = await supabase
         .from("customers")
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error("❌ データ取得エラー:", error.message);
+      if (error1) {
+        console.error("❌ customers取得エラー:", error1.message);
       } else {
-        const formatted = data.map((item) => {
+        const formatted = customers.map((item) => {
           const [prefecture, city, ...rest] = item.address.split(" ");
           const town = rest.join(" ");
           return {
@@ -53,16 +49,49 @@ export default function DashboardPage() {
             landSize: item.area,
             estimatedPrice: item.price,
             createdAt: item.created_at,
+            status: item.status || 'new',
+            id: item.id,
+            isBroadcast: false,
           };
         }) as Lead[];
         setLeads(formatted);
+      }
+
+      // public_list テーブル
+      const { data: publicListData, error: error2 } = await supabase
+        .from("public_list")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error2) {
+        console.error("❌ 公開リスト取得エラー:", error2.message);
+      } else {
+        const formattedPublic = publicListData.map((item) => {
+          const [prefecture, city, ...rest] = item.address.split(" ");
+          const town = rest.join(" ");
+          return {
+            ...item,
+            prefecture,
+            city,
+            town,
+            landSize: item.area,
+            estimatedPrice: item.price,
+            createdAt: item.created_at,
+            status: item.status || 'new',
+            id: item.id,
+            isBroadcast: true,
+          };
+        }) as Lead[];
+        setPublicList(formattedPublic);
       }
     };
 
     fetchLeads();
   }, [user]);
 
-  const filteredLeads = leads.filter((lead) => {
+  const combinedLeads = [...publicList, ...leads];
+
+  const filteredLeads = combinedLeads.filter((lead) => {
     const matchesSearch =
       lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       `${lead.prefecture} ${lead.city} ${lead.town}`.toLowerCase().includes(searchTerm.toLowerCase());
@@ -72,6 +101,12 @@ export default function DashboardPage() {
   });
 
   const handleStatusChange = async (leadId: string, status: Lead['status']) => {
+    const target = leads.find(l => l.id === leadId && !l.isBroadcast);
+    if (!target) {
+      toast.error("公開リストのデータはステータス変更できません");
+      return;
+    }
+
     const { error } = await supabase
       .from("customers")
       .update({ status })
@@ -88,6 +123,12 @@ export default function DashboardPage() {
   };
 
   const handleDelete = async (leadId: string) => {
+    const target = leads.find(l => l.id === leadId && !l.isBroadcast);
+    if (!target) {
+      toast.error("公開リストのデータは削除できません");
+      return;
+    }
+
     const { error } = await supabase.from("customers").delete().eq("id", leadId);
 
     if (error) {
@@ -98,9 +139,9 @@ export default function DashboardPage() {
     }
   };
 
-  const newLeads = leads.filter((lead) => lead.status === 'new').length;
-  const inProgressLeads = leads.filter((lead) => lead.status === 'inProgress').length;
-  const completedLeads = leads.filter((lead) => lead.status === 'completed').length;
+  const newLeads = combinedLeads.filter((lead) => lead.status === 'new').length;
+  const inProgressLeads = combinedLeads.filter((lead) => lead.status === 'inProgress').length;
+  const completedLeads = combinedLeads.filter((lead) => lead.status === 'completed').length;
 
   return (
     <div className="container py-10">

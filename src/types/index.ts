@@ -14,6 +14,8 @@ export type Lead = {
   estimatedPrice: number;
   status: "new" | "inProgress" | "completed";
   createdAt: string; // Supabaseのcreated_atはISO文字列なのでstringでOK
+  isBroadcast?: boolean;
+
 };
 
 export type EstimateFormData = {
