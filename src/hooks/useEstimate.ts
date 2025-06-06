@@ -1,29 +1,32 @@
-export async function estimatePrice({
-    city_code,
-    features
-  }: {
-    city_code: string;
-    features: [number, number, number, number, number];
-  }) {
-    const response = await fetch('http://127.0.0.1:5001/predict', {
-      method: 'POST',
+export const estimatePrice = async ({
+  city_code,
+  features,
+}: {
+  city_code: string;
+  features: [number, number, number, number, number];
+}) => {
+  try {
+    const response = await fetch("http://192.168.3.43:5001/predict", {
+
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         city_code,
         features,
       }),
     });
-  
+
     if (!response.ok) {
-      throw new Error('AI査定APIエラー');
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-  
+
     const data = await response.json();
-  
-    return {
-      predicted_price: data.predicted_price,
-    };
+    console.log("✅ AI査定APIレスポンス:", data);
+    return data;
+  } catch (error) {
+    console.error("💥 AI査定APIエラー:", error);
+    throw error;
   }
-  
+};
